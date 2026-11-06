@@ -1,0 +1,62 @@
+[
+  {
+    "device": "Drone-Scout-01",
+    "esp_board": "ESP (demo)",
+    "tank": "Tank 2",
+    "event": "WATER_DROP_DETECTED",
+    "severity": "error",
+    "source": "simulator",
+    "timestamp": "2026-11-06T15:53:41.867Z",
+    "id": "7c649295d52d48c983e1644d74242230",
+    "server_timestamp": "2026-11-06T15:53:41.888+00:00",
+    "acknowledged": false,
+    "acknowledged_at": null,
+    "cleared": false,
+    "cleared_at": null
+  },
+  {
+    "device": "Drone-Scout-01",
+    "esp_board": "ESP (demo)",
+    "tank": "Tank 2",
+    "event": "WATER_DROP_DETECTED",
+    "severity": "error",
+    "source": "simulator",
+    "timestamp": "2026-11-06T15:55:30.952Z",
+    "id": "7ee83cbc7fbb40f98870e82119aa93aa",
+    "server_timestamp": "2026-11-06T15:55:30.955+00:00",
+    "acknowledged": false,
+    "acknowledged_at": null,
+    "cleared": false,
+    "cleared_at": null
+  },
+  {
+    "device": "Drone-Scout-01",
+    "esp_board": "ESP (demo)",
+    "tank": "Tank 2",
+    "event": "WATER_DROP_DETECTED",
+    "severity": "error",
+    "source": "simulator",
+    "timestamp": "2026-11-06T15:57:12.662Z",
+    "id": "09be6200a27d47cd85df72750a5431fb",
+    "server_timestamp": "2026-11-06T15:57:12.676+00:00",
+    "acknowledged": false,
+    "acknowledged_at": null,
+    "cleared": false,
+    "cleared_at": null
+  },
+  {
+    "device": "Drone-Scout-01",
+    "esp_board": "ESP (demo)",
+    "tank": "Tank 2",
+    "event": "WATER_DROP_DETECTED",
+    "severity": "error",
+    "source": "simulator",
+    "timestamp": "2026-11-06T15:58:42.658Z",
+    "id": "21e4caacd0cc46d9ac1e875770c3e4fb",
+    "server_timestamp": "2026-11-06T15:58:42.969+00:00",
+    "acknowledged": false,
+    "acknowledged_at": null,
+    "cleared": false,
+    "cleared_at": null
+  }
+]

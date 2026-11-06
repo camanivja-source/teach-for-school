@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alert app · Drones for Social Good</title>
+<meta name="description" content="Live water drop alerts from the Drones for Social Good demo.">
+
+<script>
+  // Choose the colour theme before the page is drawn, so it does not flash.
+  // A saved choice wins. Otherwise we follow the device's own setting.
+  (function () {
+    var saved = null;
+    try { saved = localStorage.getItem("dfsg-theme"); } catch (error) { /* Storage is blocked. */ }
+    var deviceIsDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var isValid = saved === "light" || saved === "dark";
+    document.documentElement.dataset.theme = isValid ? saved : (deviceIsDark ? "dark" : "light");
+  })();
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  /* ---------- Colours for each theme ---------- */
+  :root {
+    color-scheme: light;
+    --bg: #eef2f6;
+    --text: #0d1520;
+    --muted: #4a5668;       /* Softer text that still reads clearly. */
+    --surface: #ffffff;
+    --line: #5b6878;        /* Borders of controls. */
+    --line-soft: #ccd5e0;   /* Quiet dividers. */
+    --accent: #e9a800;
+    --focus: #0d1520;       /* Keyboard focus ring. */
+    --focus-gap: #ffffff;   /* Thin contrasting edge inside the ring. */
+    --red: #d42020;
+    --amber: #c26a00;
+    --green: #15803d;
+    --on-accent: #0d1520;
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #060a13;
+    --text: #eef3fa;
+    --muted: #aab6c8;
+    --surface: #0e1421;
+    --line: #8a97ab;
+    --line-soft: #2a364c;
+    --accent: #ffc61a;
+    --focus: #ffc61a;
+    --focus-gap: #060a13;
+  }
+
+  /* ---------- Basics. The small-screen layout comes first. ---------- */
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    font-size: 1rem;
+    line-height: 1.5;
+    overflow-wrap: anywhere;   /* Very long names wrap, not overflow. */
+  }
+  h1, h2, h3 {
+    font-family: "Space Grotesk", "Inter", system-ui, sans-serif;
+    font-weight: 700;
+    line-height: 1.15;
+    margin: 0;
+  }
+  p { margin: 0; }
+  a { color: inherit; text-underline-offset: 3px; }
+  ul { list-style: none; margin: 0; padding: 0; }
+
+  .page { width: 100%; max-width: 64rem; margin: 0 auto; padding: 0 1rem; }
+
+  /* Visible keyboard focus ring. */
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px var(--focus-gap);
+  }
+  /* The skip link moves focus to the whole main area, which needs no ring. */
+  main:focus, main:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+
+  /* Text for screen readers only. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .skip-link {
+    position: absolute;
+    left: 1rem;
+    top: -6rem;
+    z-index: 10;
+    padding: 0.75rem 1rem;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-weight: 600;
+    border-radius: 0.5rem;
+  }
+  .skip-link:focus { top: 0.5rem; }
+
+  /* ---------- Buttons: at least 44px tall for fingers ---------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    min-width: 44px;
+    padding: 0.5rem 0.9rem;
+    border: 2px solid var(--line);
+    border-radius: 0.6rem;
+    background: var(--surface);
+    color: var(--text);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn:hover { border-color: var(--text); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .btn-primary:hover { border-color: var(--on-accent); }
+  .btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+  .btn svg { width: 1.1em; height: 1.1em; flex: none; }
+
+  /* ---------- Pills: small labels ---------- */
+  .pill {
+    display: inline-block;
+    padding: 0.15rem 0.6rem;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    line-height: 1.4;
+  }
+  .pill-red { background: var(--red); color: #ffffff; }
+  .pill-green { background: var(--green); color: #ffffff; }
+  .pill-amber { background: var(--amber); color: #0d1520; }
+  .pill-neutral { background: var(--surface); color: var(--text); border-color: var(--line); }
+  .pill-nodata { background: var(--surface); color: var(--text); border-color: var(--amber); }
+  /* The source pills look different in shape as well as colour. */
+  .pill-simulator { background: var(--amber); color: #0d1520; border: 2px dashed #0d1520; }
+  .pill-real { background: var(--text); color: var(--bg); border-radius: 0.35rem; }
+
+  /* ---------- Header ---------- */
+  .site-header { padding: 1rem 0 1.25rem; }
+  .header-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; }
+  .back-link { display: inline-flex; align-items: center; min-height: 44px; font-weight: 500; }
+  .title-block { margin-top: 1rem; }
+  .title-block::before {
+    content: "";
+    display: block;
+    width: 3rem;
+    height: 4px;
+    margin-bottom: 0.75rem;
+    background: var(--accent);
+  }
+  .eyebrow { font-size: 0.875rem; font-weight: 600; color: var(--muted); }
+  h1 { font-size: clamp(2rem, 8vw, 3.25rem); letter-spacing: -0.02em; margin-top: 0.15rem; }
+  .intro { margin-top: 0.6rem; color: var(--muted); max-width: 44rem; }
+
+  /* ---------- Sections ---------- */
+  section { margin-top: 1.5rem; }
+  .section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.25rem 1rem; margin-bottom: 0.75rem; }
+  h2 { font-size: 1.375rem; }
+  .small-note { font-size: 0.875rem; color: var(--muted); }
+
+  /* ---------- Connection line ---------- */
+  .status-bar { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; margin-top: 1rem; }
+  .offline-note {
+    width: 100%;
+    padding: 0.6rem 0.8rem;
+    background: var(--surface);
+    border: 2px solid var(--amber);
+    border-radius: 0.6rem;
+    font-weight: 500;
+  }
+  .action-note {
+    margin-top: 0.75rem;
+    padding: 0.6rem 0.8rem;
+    background: var(--surface);
+    border: 2px solid var(--red);
+    border-radius: 0.6rem;
+    font-weight: 500;
+  }
+  .action-note:empty { display: none; }
+
+  /* ---------- Error banner ---------- */
+  .banner {
+    margin-top: 1.25rem;
+    padding: 1rem;
+    border: 3px solid var(--red);
+    border-radius: 0.9rem;
+    background: var(--surface);
+    color: var(--text);
+  }
+  /* An error nobody has acknowledged yet is solid red with white text. */
+  .banner.needs-attention {
+    --focus: #ffffff;
+    --focus-gap: #0d1520;
+    background: var(--red);
+    color: #ffffff;
+  }
+  .banner.needs-attention .btn { background: #ffffff; border-color: #ffffff; color: #0d1520; }
+  .banner.needs-attention .btn:hover { border-color: #0d1520; }
+  .banner-title { display: flex; align-items: center; gap: 0.5rem; font-size: 1.25rem; }
+  .banner-title svg { width: 1.3em; height: 1.3em; flex: none; }
+  .banner-lines { margin-top: 0.5rem; }
+  .banner-line + .banner-line { margin-top: 0.5rem; }
+  .banner-ack { font-weight: 700; }
+  .button-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; }
+
+  /* ---------- Tank cards ---------- */
+  .tank-grid { display: grid; gap: 0.75rem; grid-template-columns: 1fr; }
+  .tank-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.9rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-top: 5px solid var(--line);
+    border-radius: 0.75rem;
+  }
+  .tank-card.is-ok { border-top-color: var(--green); }
+  .tank-card.is-error { border-color: var(--red); border-width: 2px; border-top-width: 5px; }
+  .tank-card.is-nodata { border-color: var(--amber); border-width: 2px; border-top-width: 5px; }
+  .tank-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.35rem 0.5rem; }
+  .tank-top h3 { font-size: 1.125rem; }
+  .tank-pills { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+  .tank-detail { font-size: 0.9375rem; }
+  .tank-newest { font-size: 0.875rem; color: var(--muted); }
+  .tank-newest .pill { margin-top: 0.25rem; }
+
+  /* ---------- Live feed ---------- */
+  .feed-row {
+    padding: 0.9rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-left: 5px solid var(--line);
+    border-radius: 0.75rem;
+  }
+  .feed-row + .feed-row { margin-top: 0.6rem; }
+  .feed-row.is-open-error { border-left-color: var(--red); }
+  .feed-row.is-seen-error { border-left-color: var(--amber); }
+  /* Cleared rows stay in the history, but they look quiet. */
+  .feed-row.is-cleared {
+    background: transparent;
+    border-style: dashed;
+    border-left-width: 1px;
+    border-color: var(--line);
+    color: var(--muted);
+  }
+  .feed-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 1rem; margin: 0; }
+  .feed-fields div { min-width: 0; }
+  .feed-fields .wide { grid-column: 1 / -1; }
+  .feed-fields dt { font-size: 0.8125rem; font-weight: 500; color: var(--muted); }
+  .feed-fields dd { margin: 0.1rem 0 0; font-weight: 500; }
+  .feed-fields dd .pill { font-weight: 600; }
+  .feed-severity { margin-right: 0.35rem; }
+  .empty-state {
+    padding: 1.25rem 1rem;
+    background: var(--surface);
+    border: 1px dashed var(--line);
+    border-radius: 0.75rem;
+    font-weight: 500;
+  }
+
+  /* ---------- Notifications ---------- */
+  .notify-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 0.75rem;
+  }
+  .notify-box .btn { align-self: flex-start; }
+
+  .site-footer { margin-top: 2.5rem; padding-top: 1.25rem; padding-bottom: 2rem; font-size: 0.875rem; color: var(--muted); border-top: 1px solid var(--line-soft); }
+
+  /* ---------- Bigger screens ---------- */
+  @media (min-width: 720px) {
+    .page { padding-left: 1.5rem; padding-right: 1.5rem; }
+    .tank-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .feed-fields { grid-template-columns: 1.4fr 1fr 0.7fr 1.4fr 1.1fr 1fr; }
+    .feed-fields .wide { grid-column: auto; }
+    .notify-box { flex-direction: row; align-items: center; justify-content: space-between; gap: 1.5rem; }
+    .notify-box .btn { align-self: center; flex: none; }
+  }
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to the alerts</a>
+
+<header class="site-header">
+  <div class="page">
+    <div class="header-row">
+      <a class="back-link" href="/">Back to the website</a>
+      <button id="theme-toggle" class="btn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true" focusable="false">
+          <circle cx="12" cy="12" r="9"></circle>
+          <path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor"></path>
+        </svg>
+        <span id="theme-toggle-text">Theme</span>
+      </button>
+    </div>
+    <div class="title-block">
+      <p class="eyebrow">Alert app</p>
+      <h1>Drones for Social Good</h1>
+      <p class="intro">Everything here is live data from the receiver. An alert marked Simulator (demo) is a demonstration, not a real detection.</p>
+    </div>
+    <div class="status-bar">
+      <p id="last-updated" class="small-note">Waiting for the receiver.</p>
+      <p id="offline-note" class="offline-note" role="status" hidden></p>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="page" tabindex="-1">
+  <noscript><p class="offline-note">This page needs JavaScript to show live alerts.</p></noscript>
+
+  <!-- Error banner. It appears when any tank has an uncleared error. -->
+  <div id="error-banner" class="banner" role="alert" hidden>
+    <h2 class="banner-title">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+        <path d="M12 2.5s-7 7.6-7 12.5a7 7 0 0 0 14 0c0-4.9-7-12.5-7-12.5z"></path>
+      </svg>
+      Water drop alert
+    </h2>
+    <div id="banner-lines" class="banner-lines"></div>
+    <div class="button-row">
+      <button id="ack-all" class="btn" type="button">Acknowledge all</button>
+      <button id="clear-all" class="btn" type="button">Clear all</button>
+    </div>
+  </div>
+
+  <!-- Shows a message only if a button press did not work. -->
+  <div aria-live="polite"><p id="action-note" class="action-note"></p></div>
+
+  <section aria-labelledby="tanks-heading">
+    <div class="section-head">
+      <h2 id="tanks-heading" tabindex="-1">Tank status</h2>
+      <p id="tanks-window" class="small-note"></p>
+    </div>
+    <ul id="tank-grid" class="tank-grid" role="list" aria-labelledby="tanks-heading"></ul>
+    <p id="tanks-waiting" class="empty-state">Waiting for the receiver.</p>
+  </section>
+
+  <section aria-labelledby="feed-heading">
+    <div class="section-head">
+      <h2 id="feed-heading" tabindex="-1">Live feed</h2>
+      <p class="small-note">Newest first, up to 100 events. Refreshes every 5 seconds.</p>
+    </div>
+    <ul id="feed-list" role="list" aria-labelledby="feed-heading"></ul>
+    <p id="feed-empty" class="empty-state">Waiting for the receiver.</p>
+  </section>
+
+  <section aria-labelledby="notify-heading">
+    <div class="section-head">
+      <h2 id="notify-heading" tabindex="-1">Notifications</h2>
+    </div>
+    <div class="notify-box">
+      <p id="notify-note"></p>
+      <button id="notify-button" class="btn btn-primary" type="button">Turn on notifications</button>
+    </div>
+  </section>
+
+  <!-- Screen readers read out anything placed in here. -->
+  <div id="live-announcer" class="sr-only" aria-live="polite"></div>
+</main>
+
+<footer class="site-footer page">
+  Drones for Social Good · Grade 9 · Technology for Good · PBL 2026–27 · The Indian International School, DSO
+</footer>
+
+<script>
+  "use strict";
+
+  // ==========================================================================
+  // Settings and page elements
+  // ==========================================================================
+
+  const REFRESH_EVERY_MS = 5000;   // Fetch new data every 5 seconds.
+  const FETCH_TIMEOUT_MS = 4000;   // Give up on a slow request after 4 seconds.
+  const THEME_KEY = "dfsg-theme";  // The website uses this same saved setting.
+
+  // Find an element on the page by its id.
+  function byId(id) {
+    return document.getElementById(id);
+  }
+
+  const banner = byId("error-banner");
+  const bannerLines = byId("banner-lines");
+  const ackAllButton = byId("ack-all");
+  const clearAllButton = byId("clear-all");
+  const actionNote = byId("action-note");
+  const tankGrid = byId("tank-grid");
+  const tanksWaiting = byId("tanks-waiting");
+  const tanksWindow = byId("tanks-window");
+  const feedList = byId("feed-list");
+  const feedEmpty = byId("feed-empty");
+  const lastUpdated = byId("last-updated");
+  const offlineNote = byId("offline-note");
+  const liveAnnouncer = byId("live-announcer");
+  const notifyButton = byId("notify-button");
+  const notifyNote = byId("notify-note");
+  const themeToggle = byId("theme-toggle");
+  const themeToggleText = byId("theme-toggle-text");
+
+  // Remembered between refreshes.
+  let lastSnapshot = null;        // A text copy of the last data we drew.
+  let lastBannerText = null;      // What the banner last said.
+  let firstLoadDone = false;      // Have we had our first answer from the server?
+  const seenEventIds = new Set(); // Every event id we have already seen.
+  let requestCounter = 0;         // Numbers each refresh, in the order it began.
+  let newestHandled = 0;          // The newest refresh we have used so far.
+
+
+  // ==========================================================================
+  // Small helpers
+  // ==========================================================================
+
+  // Make a new element. Text always goes in through textContent, never
+  // innerHTML. The browser then treats it as plain words, so nobody can sneak
+  // a script into the page by sending a strange device name.
+  function make(tag, className, text) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined && text !== null) element.textContent = String(text);
+    return element;
+  }
+
+  // Remove everything inside an element.
+  function emptyElement(element) {
+    while (element.firstChild) element.removeChild(element.firstChild);
+  }
+
+  // Turn a time from the server into words for this device's own time zone.
+  function formatTime(isoText) {
+    if (!isoText) return "Unknown time";
+    const date = new Date(isoText);
+    if (Number.isNaN(date.getTime())) return String(isoText);
+    return date.toLocaleString([], { dateStyle: "medium", timeStyle: "medium" });
+  }
+
+  // A pill that says clearly where an alert came from.
+  function makeSourcePill(source) {
+    if (source === "simulator") return make("span", "pill pill-simulator", "Simulator (demo)");
+    if (source === "real_sensor") return make("span", "pill pill-real", "Real sensor");
+    return make("span", "pill pill-neutral", source || "Unknown source");
+  }
+
+  // The source written out as a sentence, for the banner and notifications.
+  function sourceSentence(source) {
+    if (source === "simulator") return "Source: simulator (demo, not a real detection).";
+    if (source === "real_sensor") return "Source: real sensor.";
+    return "Source: unknown.";
+  }
+
+  // The sentence that describes one alert.
+  function alertSentence(device, tank, source) {
+    return device + " reported a water drop at " + tank + ". " + sourceSentence(source);
+  }
+
+  // Turn the event's code into plain words.
+  function eventName(code) {
+    return code === "WATER_DROP_DETECTED" ? "Water drop detected" : code;
+  }
+
+  function isUnclearedError(event) {
+    return event.severity === "error" && !event.cleared;
+  }
+
+
+  // ==========================================================================
+  // Keeping keyboard focus in place when the page is redrawn
+  // ==========================================================================
+
+  // Note which button has focus, if it is one that a redraw could change.
+  function rememberFocus() {
+    const active = document.activeElement;
+    if (!active) return null;
+    if (active === ackAllButton || active === clearAllButton) return { bannerButton: active };
+    if (feedList.contains(active)) {
+      return { eventId: active.dataset.eventId, action: active.dataset.action };
+    }
+    return null;
+  }
+
+  // Put focus back after a redraw. If that exact button has gone, we use the
+  // nearest sensible place, so a keyboard user never gets lost.
+  function restoreFocus(saved) {
+    if (!saved) return;
+
+    if (saved.bannerButton) {
+      if (banner.hidden) {
+        byId("tanks-heading").focus();
+      } else if (saved.bannerButton.disabled) {
+        clearAllButton.focus();
+      }
+      return;
+    }
+
+    const buttons = Array.from(feedList.querySelectorAll("button"));
+    const sameRow = buttons.filter(function (button) {
+      return button.dataset.eventId === saved.eventId;
+    });
+    const sameButton = sameRow.find(function (button) {
+      return button.dataset.action === saved.action;
+    });
+    const row = Array.from(feedList.children).find(function (item) {
+      return item.dataset.eventId === saved.eventId;
+    });
+
+    if (sameButton) sameButton.focus();
+    else if (sameRow.length > 0) sameRow[0].focus();
+    else if (row) row.focus();
+    else byId("feed-heading").focus();
+  }
+
+
+  // ==========================================================================
+  // Drawing the error banner
+  // ==========================================================================
+
+  // Build one line for each different device and source. If a tank has both a
+  // simulator alert and a real sensor alert, both get named, so a real
+  // detection can never hide behind a demo one.
+  function buildBannerLines(tanks, events) {
+    const lines = [];
+
+    tanks.forEach(function (tank) {
+      if (tank.status !== "Error") return;
+
+      const openErrors = events.filter(function (event) {
+        return event.tank === tank.tank && isUnclearedError(event);
+      });
+
+      // The error may be older than the newest 100 events we were sent.
+      if (openErrors.length === 0) {
+        lines.push({
+          text: tank.tank + " has an older error that has not been cleared. Its newest event came from " +
+            (tank.device || "an unknown device") + ". " + sourceSentence(tank.source),
+          acknowledged: tank.acknowledged
+        });
+        return;
+      }
+
+      const groups = new Map();
+      openErrors.forEach(function (event) {
+        const key = JSON.stringify([event.device, event.source]);
+        if (!groups.has(key)) {
+          groups.set(key, { device: event.device, source: event.source, acknowledged: true });
+        }
+        if (!event.acknowledged) groups.get(key).acknowledged = false;
+      });
+
+      groups.forEach(function (group) {
+        lines.push({
+          text: alertSentence(group.device, tank.tank, group.source),
+          acknowledged: group.acknowledged
+        });
+      });
+    });
+
+    return lines;
+  }
+
+  function renderBanner(tanks, events) {
+    const errorTanks = tanks.filter(function (tank) { return tank.status === "Error"; });
+
+    if (errorTanks.length === 0) {
+      banner.hidden = true;
+      lastBannerText = null;
+      return;
+    }
+
+    const allAcknowledged = errorTanks.every(function (tank) { return tank.acknowledged; });
+    const lines = buildBannerLines(tanks, events);
+
+    // The banner is a role="alert", so screen readers read it out when it
+    // changes. We only touch it if the words have really changed.
+    const bannerText = JSON.stringify(lines);
+    if (bannerText !== lastBannerText) {
+      lastBannerText = bannerText;
+      emptyElement(bannerLines);
+      lines.forEach(function (line) {
+        const paragraph = make("p", "banner-line", line.text);
+        if (line.acknowledged) {
+          paragraph.appendChild(document.createTextNode(" "));
+          paragraph.appendChild(make("span", "banner-ack", "Acknowledged, not yet cleared."));
+        }
+        bannerLines.appendChild(paragraph);
+      });
+    }
+
+    banner.classList.toggle("needs-attention", !allAcknowledged);
+    ackAllButton.disabled = allAcknowledged;
+    banner.hidden = false;
+  }
+
+
+  // ==========================================================================
+  // Drawing the tank cards
+  // ==========================================================================
+
+  function renderTanks(tanks, windowMinutes) {
+    emptyElement(tankGrid);
+    tanksWaiting.hidden = true;
+    tanksWindow.textContent = "Recent means the last " + windowMinutes + " minutes.";
+
+    tanks.forEach(function (tank) {
+      let cardClass = "is-nodata";
+      let pillClass = "pill-nodata";
+      let detail = "No data in the last " + windowMinutes + " minutes.";
+
+      if (tank.status === "OK") {
+        cardClass = "is-ok";
+        pillClass = "pill-green";
+        detail = "No open errors, and an event arrived in the last " + windowMinutes + " minutes.";
+      } else if (tank.status === "Error") {
+        cardClass = "is-error";
+        pillClass = "pill-red";
+        detail = tank.acknowledged
+          ? "An error has been acknowledged, but nobody has cleared it yet."
+          : "An error is waiting for someone to look at it.";
+      }
+
+      const item = make("li");
+      const card = make("article", "tank-card " + cardClass);
+
+      const top = make("div", "tank-top");
+      top.appendChild(make("h3", "", tank.tank));
+      const pills = make("div", "tank-pills");
+      pills.appendChild(make("span", "pill " + pillClass, tank.status));
+      if (tank.status === "Error" && tank.acknowledged) {
+        pills.appendChild(make("span", "pill pill-neutral", "Acknowledged"));
+      }
+      top.appendChild(pills);
+      card.appendChild(top);
+
+      card.appendChild(make("p", "tank-detail", detail));
+
+      if (tank.last_event_at) {
+        const newest = make("p", "tank-newest",
+          "Newest event: " + formatTime(tank.last_event_at) + ", from " + (tank.device || "an unknown device") + ". ");
+        newest.appendChild(makeSourcePill(tank.source));
+        card.appendChild(newest);
+      } else {
+        card.appendChild(make("p", "tank-newest", "No events on record for this tank."));
+      }
+
+      item.appendChild(card);
+      tankGrid.appendChild(item);
+    });
+  }
+
+
+  // ==========================================================================
+  // Drawing the live feed
+  // ==========================================================================
+
+  // One label and value in a feed row. The value can be text or an element.
+  function makeField(label, value, isWide) {
+    const wrapper = make("div", isWide ? "wide" : "");
+    wrapper.appendChild(make("dt", "", label));
+    const data = make("dd");
+    if (value instanceof Node) data.appendChild(value);
+    else data.textContent = String(value);
+    wrapper.appendChild(data);
+    return wrapper;
+  }
+
+  function makeSeverityPill(severity) {
+    if (severity === "error") return make("span", "pill pill-red feed-severity", "Error");
+    if (severity === "warning") return make("span", "pill pill-amber feed-severity", "Warning");
+    if (severity === "ok") return make("span", "pill pill-green feed-severity", "OK");
+    return make("span", "pill pill-neutral feed-severity", severity || "Unknown");
+  }
+
+  function makeRowButton(event, action, label, extraWords) {
+    const button = make("button", "btn", label);
+    button.type = "button";
+    button.dataset.eventId = event.id;
+    button.dataset.action = action;
+    // Screen reader users hear which alert this button belongs to.
+    button.setAttribute("aria-label", label + " " + extraWords);
+    return button;
+  }
+
+  function makeFeedRow(event) {
+    const row = make("li", "feed-row");
+    row.dataset.eventId = event.id;
+    row.tabIndex = -1;   // Lets code move focus here if the buttons have gone.
+
+    if (event.cleared) row.classList.add("is-cleared");
+    else if (event.severity === "error" && event.acknowledged) row.classList.add("is-seen-error");
+    else if (event.severity === "error") row.classList.add("is-open-error");
+
+    let state = "New";
+    if (event.cleared) state = "Cleared";
+    else if (event.acknowledged) state = "Acknowledged";
+
+    const eventCell = make("span");
+    eventCell.appendChild(makeSeverityPill(event.severity));
+    eventCell.appendChild(document.createTextNode(eventName(event.event)));
+
+    const fields = make("dl", "feed-fields");
+    fields.appendChild(makeField("Time", formatTime(event.server_timestamp || event.timestamp), true));
+    fields.appendChild(makeField("Device", event.device));
+    fields.appendChild(makeField("Tank", event.tank));
+    fields.appendChild(makeField("Event", eventCell, true));
+    fields.appendChild(makeField("Source", makeSourcePill(event.source)));
+    fields.appendChild(makeField("State", state));
+    row.appendChild(fields);
+
+    // Only show the buttons that still make sense for this event.
+    if (!event.cleared) {
+      const buttons = make("div", "button-row");
+      const about = "the alert at " + event.tank + " from " + formatTime(event.server_timestamp);
+      if (!event.acknowledged) {
+        buttons.appendChild(makeRowButton(event, "acknowledge", "Acknowledge", about));
+      }
+      buttons.appendChild(makeRowButton(event, "clear", "Clear", about));
+      row.appendChild(buttons);
+    }
+    return row;
+  }
+
+  function renderFeed(events) {
+    emptyElement(feedList);
+    feedEmpty.textContent = "No alerts yet.";
+    feedEmpty.hidden = events.length > 0;
+    events.forEach(function (event) {
+      feedList.appendChild(makeFeedRow(event));
+    });
+  }
+
+
+  // ==========================================================================
+  // New alerts: announcing them and sending notifications
+  // ==========================================================================
+
+  function showNotification(event) {
+    if (!("Notification" in window) || !window.isSecureContext) return;
+    if (Notification.permission !== "granted") return;
+    try {
+      new Notification("Water drop alert: " + event.tank, {
+        body: alertSentence(event.device, event.tank, event.source),
+        tag: event.id
+      });
+    } catch (error) {
+      // Some phones do not allow notifications to be made this way.
+      notifyNote.textContent = "This browser would not show the notification. The banner and feed on this page still work.";
+    }
+  }
+
+  // Compare the events with the ids we have already seen. The first answer
+  // from the server only records the ids, so old events do not set anything off.
+  function handleNewEvents(events) {
+    const newEvents = events.filter(function (event) { return !seenEventIds.has(event.id); });
+    newEvents.forEach(function (event) { seenEventIds.add(event.id); });
+
+    if (!firstLoadDone) {
+      firstLoadDone = true;
+      return;
+    }
+    if (newEvents.length === 0) return;
+
+    // The list is newest first, so flip it to report them in the order they came.
+    const oldestFirst = newEvents.slice().reverse();
+    liveAnnouncer.textContent = oldestFirst.map(function (event) {
+      return "New alert. " + alertSentence(event.device, event.tank, event.source);
+    }).join(" ");
+
+    oldestFirst.forEach(function (event) {
+      if (isUnclearedError(event)) showNotification(event);
+    });
+  }
+
+
+  // ==========================================================================
+  // Getting data from the receiver
+  // ==========================================================================
+
+  // Ask the server for something, and give up if it takes too long.
+  async function fetchJson(url, options) {
+    const controller = new AbortController();
+    const timer = setTimeout(function () { controller.abort(); }, FETCH_TIMEOUT_MS);
+    try {
+      const settings = Object.assign({ cache: "no-store", signal: controller.signal }, options);
+      const response = await fetch(url, settings);
+      if (!response.ok) throw new Error("The server answered with code " + response.status);
+      return await response.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  // A newer refresh may finish before an older one. This returns true if an
+  // answer is out of date, so we ignore it and never go back to older data.
+  function isOutOfDate(requestNumber) {
+    if (requestNumber < newestHandled) return true;
+    newestHandled = requestNumber;
+    return false;
+  }
+
+  function showOffline() {
+    // We keep the last data on screen and only add this note.
+    const message = "Could not reach the receiver. This page is showing the last data it received, and it will keep trying every 5 seconds.";
+    if (offlineNote.textContent !== message) offlineNote.textContent = message;
+    offlineNote.hidden = false;
+  }
+
+  function showOnline() {
+    offlineNote.hidden = true;
+    offlineNote.textContent = "";
+    lastUpdated.textContent = "Last updated " + new Date().toLocaleTimeString();
+  }
+
+  async function refresh() {
+    requestCounter += 1;
+    const requestNumber = requestCounter;
+
+    let eventsData;
+    let statusData;
+    try {
+      const answers = await Promise.all([fetchJson("/api/events"), fetchJson("/api/status")]);
+      eventsData = answers[0];
+      statusData = answers[1];
+      if (!Array.isArray(eventsData.events) || !Array.isArray(statusData.tanks)) {
+        throw new Error("The server's answer was not in the expected shape.");
+      }
+    } catch (error) {
+      if (!isOutOfDate(requestNumber)) showOffline();
+      return;
+    }
+
+    if (isOutOfDate(requestNumber)) return;
+
+    showOnline();
+    handleNewEvents(eventsData.events);
+
+    // If nothing has changed, leave the page alone so button focus is kept.
+    // generated_at changes every time, so it is left out of this comparison.
+    const snapshot = JSON.stringify([eventsData.events, statusData.tanks, statusData.window_minutes]);
+    if (snapshot === lastSnapshot) return;
+    lastSnapshot = snapshot;
+
+    const savedFocus = rememberFocus();
+    renderBanner(statusData.tanks, eventsData.events);
+    renderTanks(statusData.tanks, statusData.window_minutes);
+    renderFeed(eventsData.events);
+    restoreFocus(savedFocus);
+  }
+
+
+  // ==========================================================================
+  // Buttons that change alerts
+  // ==========================================================================
+
+  // Send a button press to the server, then refresh straight away.
+  async function sendAction(url) {
+    try {
+      const answer = await fetchJson(url, { method: "POST" });
+      if (!answer || answer.ok !== true) throw new Error("The server did not confirm it.");
+      actionNote.textContent = "";
+    } catch (error) {
+      actionNote.textContent = "That did not work, because the receiver could not be reached or did not accept it. Please try again.";
+    }
+    await refresh();
+  }
+
+  ackAllButton.addEventListener("click", function () {
+    sendAction("/api/acknowledge-all");
+  });
+
+  clearAllButton.addEventListener("click", function () {
+    sendAction("/api/clear-all");
+  });
+
+  // One listener on the whole list handles every row's buttons, including
+  // rows that get drawn later.
+  feedList.addEventListener("click", function (clickEvent) {
+    const button = clickEvent.target.closest("button[data-action]");
+    if (!button) return;
+    sendAction("/api/events/" + encodeURIComponent(button.dataset.eventId) + "/" + button.dataset.action);
+  });
+
+
+  // ==========================================================================
+  // The notifications button
+  // ==========================================================================
+
+  // We only ask the browser for permission after the person presses the button.
+  function updateNotifyArea() {
+    if (!("Notification" in window)) {
+      notifyButton.disabled = true;
+      notifyNote.textContent = "This browser does not support notifications. Keep this page open and watch the banner and feed instead.";
+      return;
+    }
+    if (!window.isSecureContext) {
+      notifyButton.disabled = true;
+      notifyNote.textContent = "Browsers only allow notifications on HTTPS or localhost. At an address like http://[Laptop IP]:5000 they will not work on a phone, so keep this page open and watch the banner and feed instead.";
+      return;
+    }
+    if (Notification.permission === "granted") {
+      notifyButton.disabled = true;
+      notifyButton.textContent = "Notifications are on";
+      notifyNote.textContent = "You will get a notification when a new error arrives. It will say whether it came from the simulator or a real sensor.";
+    } else if (Notification.permission === "denied") {
+      notifyButton.disabled = true;
+      notifyNote.textContent = "Notifications are blocked for this page. You can allow them in your browser's site settings, then reload the page.";
+    } else {
+      notifyButton.disabled = false;
+      notifyNote.textContent = "Get a browser notification when a new error arrives. Your browser will ask you first.";
+    }
+  }
+
+  notifyButton.addEventListener("click", async function () {
+    try {
+      await Notification.requestPermission();
+    } catch (error) {
+      notifyNote.textContent = "The browser could not turn on notifications.";
+      return;
+    }
+    updateNotifyArea();
+    // The button is disabled once permission is decided, so move focus nearby.
+    if (notifyButton.disabled) byId("notify-heading").focus();
+  });
+
+
+  // ==========================================================================
+  // The theme button
+  // ==========================================================================
+
+  function currentTheme() {
+    return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  }
+
+  function updateThemeButton() {
+    const nextTheme = currentTheme() === "dark" ? "light" : "dark";
+    const nextName = nextTheme === "dark" ? "Dark" : "Light";
+    themeToggleText.textContent = nextName + " theme";
+    themeToggle.setAttribute("aria-label", "Switch to " + nextTheme + " theme");
+  }
+
+  themeToggle.addEventListener("click", function () {
+    const nextTheme = currentTheme() === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = nextTheme;
+    try {
+      localStorage.setItem(THEME_KEY, nextTheme);
+    } catch (error) {
+      // Storage is blocked. The theme still changes until the page reloads.
+    }
+    updateThemeButton();
+  });
+
+
+  // ==========================================================================
+  // Start
+  // ==========================================================================
+
+  updateThemeButton();
+  updateNotifyArea();
+  refresh();
+  setInterval(refresh, REFRESH_EVERY_MS);
+</script>
+</body>
+</html>
